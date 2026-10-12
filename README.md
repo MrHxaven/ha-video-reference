@@ -12,10 +12,10 @@ Lite.
 
 ## Download
 
-[![Download HA Video Reference](https://img.shields.io/badge/Download-HA%20Video%20Reference-3ec5ff?style=for-the-badge)](https://github.com/MrHxaven/ha-video-reference/releases/latest/download/HA-Video-Reference.zip)
+[![Download HA Video Reference](https://img.shields.io/badge/Download-HA%20Video%20Reference-3ec5ff?style=for-the-badge)](https://github.com/MrHxaven/ha-video-reference/raw/main/HA-Video-Reference.zip)
 
-The button always downloads the newest version (`HA-Video-Reference.zip`). Unzip it anywhere. You can also use the
-[releases page](../../releases/latest) or **Code › Download ZIP** on this page.
+The button always downloads the newest version ([`HA-Video-Reference.zip`](HA-Video-Reference.zip)). Unzip it
+anywhere. **Code › Download ZIP** on this page works too.
 
 ## Setup (once)
 

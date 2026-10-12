@@ -4,3 +4,4 @@
 *.lua text eol=lf
 *.rbxmx text eol=lf
 *.md text eol=lf
+*.zip binary
