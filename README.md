@@ -12,8 +12,10 @@ Lite.
 
 ## Download
 
-Get **`HA Video Reference.zip`** from the [latest release](../../releases/latest) (or **Code › Download ZIP** on this
-page) and unzip it anywhere.
+[![Download HA Video Reference](https://img.shields.io/badge/Download-HA%20Video%20Reference-3ec5ff?style=for-the-badge)](https://github.com/MrHxaven/ha-video-reference/releases/latest/download/HA-Video-Reference.zip)
+
+The button always downloads the newest version (`HA-Video-Reference.zip`). Unzip it anywhere. You can also use the
+[releases page](../../releases/latest) or **Code › Download ZIP** on this page.
 
 ## Setup (once)
 
