@@ -1,12 +1,16 @@
 --[[
-	HA Video Sync — sends Heaven's Animator's frame to the HA Video Reference app (a small local server on this
-	computer, started with "Start Video Reference.bat"), so a reference video follows the timeline while you scrub
-	or play. A separate plugin with its own toolbar tab, not part of Heaven's Animator; works with the full edition
-	and Lite (it follows _G.HeavensAnimator). The first Connect makes Studio ask to let it reach localhost: allow it.
+	HA Video Sync — sends Heaven's Animator's frame to the HA Video Reference app ("HA Video Reference.exe", a small
+	app on this computer), so a reference video follows the timeline while you scrub or play. A separate plugin with
+	its own toolbar tab, not part of Heaven's Animator; works with the full edition and Lite (it follows
+	_G.HeavensAnimator). The first Connect makes Studio ask to let it reach localhost: allow it.
 
-	POST http://localhost:<port>/sync {frame, fps, playing, speed}: at most 30 times a second while something changes,
-	and once a second as a heartbeat (the app then shows "Synced with Studio"). One request at a time; the newest
-	state wins. The port and the on / off state are remembered (plugin settings).
+	POST http://localhost:<port>/sync {frame, fps, playing, speed, theme?}: at most 30 times a second while something
+	changes, and once a second as a heartbeat (the app then shows "Synced with Studio"). One request at a time; the
+	newest state wins. theme ({token = "rrggbb"}) rides on the heartbeats and on a theme change, so the app wears
+	Heaven's Animator's theme too. The port and the on / off state are remembered (plugin settings).
+	The window (owner's mockup): a card with the title and the connection state, Port + Connect, and the two steps.
+	Its colours are Heaven's Animator's current theme (_G.HeavensAnimator.theme, checked every second), or Graphite
+	while Heaven's Animator isn't running.
 ]]
 
 local RunService = game:GetService("RunService")
@@ -20,16 +24,69 @@ local DEFAULT_PORT = 34900
 local SEND_INTERVAL = 1 / 30
 local HEARTBEAT = 1
 local ICON = "rbxassetid://97131655361849" -- the drawn logo with a video badge (assets/icons/video_sync_*.png)
+local ICON_ATLAS = "rbxassetid://112384575536644" -- Heaven's Animator's icon atlas (src/UI/Assets.lua): play = cell 14
 
 local port = tonumber(plugin:GetSetting(PORT_SETTING)) or DEFAULT_PORT
 local on = plugin:GetSetting(ON_SETTING) == true
 
 ---------------------------------------------------------------------------------------------------
--- the window: port, Connect, status
+-- the theme: Heaven's Animator's tokens (src/UI/Theme.lua); Graphite while it isn't running
 
-local BG, PANEL, LINE = Color3.fromRGB(11, 13, 31), Color3.fromRGB(24, 28, 56), Color3.fromRGB(38, 43, 77)
-local TEXT, MUTED, ACCENT = Color3.fromRGB(232, 234, 248), Color3.fromRGB(155, 161, 198), Color3.fromRGB(62, 197, 255)
-local OK, WARN = Color3.fromRGB(74, 222, 128), Color3.fromRGB(251, 191, 36)
+local GRAPHITE = {
+	bg = "1c1d20", panel = "232428", panelAlt = "2a2b30", border = "36383e", text = "f2f3f5", textDim = "b5b8bf",
+	textMuted = "7d808a", accent = "ffb02e", accentText = "1d1300", accent2 = "f59e0b", select = "4a3a1c",
+	button = "2c2d32", buttonStroke = "3e4148", input = "1a1b1e", success = "4ade80", warning = "fbbf24", danger = "ff5c5c",
+}
+
+local colors: { [string]: Color3 } = {}
+local themed = {} -- {inst, property, token}
+
+-- the current theme as {token = "rrggbb"}
+local function readTheme(): { [string]: string }
+	local api = _G.HeavensAnimator
+	local theme = if type(api) == "table" then api.theme else nil
+	local out = {}
+	for token, hex in GRAPHITE do
+		local ok, c = pcall(function()
+			return theme.get(token)
+		end)
+		out[token] = if ok and typeof(c) == "Color3" then c:ToHex() else hex
+	end
+	return out
+end
+
+local function bind(inst: Instance, property: string, token: string)
+	table.insert(themed, { inst, property, token })
+	if colors[token] then
+		(inst :: any)[property] = colors[token]
+	end
+end
+
+local themeHex, themeKey = {}, ""
+local function applyTheme(): boolean
+	local hex = readTheme()
+	local keys = {}
+	for token, value in hex do
+		table.insert(keys, token .. value)
+	end
+	table.sort(keys)
+	local key = table.concat(keys)
+	if key == themeKey then
+		return false
+	end
+	themeHex, themeKey = hex, key
+	for token, value in hex do
+		colors[token] = Color3.fromHex(value)
+	end
+	for _, b in themed do
+		(b[1] :: any)[b[2]] = colors[b[3]]
+	end
+	return true
+end
+applyTheme()
+
+---------------------------------------------------------------------------------------------------
+-- the window: title + state, Port + Connect, the steps
 
 local toolbar = plugin:CreateToolbar("HA Video Reference")
 local button = toolbar:CreateButton("Video Sync", "Sync a reference video (HA Video Reference app) to Heaven's Animator's timeline", ICON)
@@ -37,10 +94,13 @@ button.ClickableWhenViewportHidden = true
 
 local widget = plugin:CreateDockWidgetPluginGui(
 	"HAVideoSync",
-	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 320, 160, 280, 150)
+	DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 460, 290, 340, 280)
 )
 widget.Title = "HA Video Sync"
 widget.Name = "HAVideoSync"
+
+local BOLD = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Bold)
+local MEDIUM = Font.new("rbxasset://fonts/families/GothamSSm.json", Enum.FontWeight.Medium)
 
 local function new(class: string, props)
 	local inst = Instance.new(class)
@@ -53,50 +113,136 @@ local function new(class: string, props)
 	return inst
 end
 
-local root = new("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = BG, BorderSizePixel = 0, Parent = widget })
-new("UIPadding", { PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingTop = UDim.new(0, 12), Parent = root })
-new("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder, Parent = root })
+local function corner(parent: Instance, radius: number)
+	new("UICorner", { CornerRadius = UDim.new(0, radius), Parent = parent })
+end
 
-local row = new("Frame", { Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1, LayoutOrder = 1, Parent = root })
-new("TextLabel", {
-	Size = UDim2.fromOffset(44, 32), BackgroundTransparency = 1, Text = "Port", TextColor3 = MUTED,
-	TextSize = 16, Font = Enum.Font.GothamMedium, TextXAlignment = Enum.TextXAlignment.Left, Parent = row,
+local function stroke(parent: Instance, token: string)
+	bind(new("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = parent }), "Color", token)
+end
+
+local function text(props, token: string)
+	local class = props.Class or "TextLabel"
+	props.Class = nil
+	props.BackgroundTransparency = props.BackgroundTransparency or 1
+	props.FontFace = props.FontFace or MEDIUM
+	props.TextXAlignment = props.TextXAlignment or Enum.TextXAlignment.Left
+	local label = new(class, props)
+	bind(label, "TextColor3", token)
+	return label
+end
+
+local root = new("Frame", { Size = UDim2.fromScale(1, 1), BorderSizePixel = 0, Parent = widget })
+bind(root, "BackgroundColor3", "bg")
+new("UIPadding", {
+	PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10), PaddingTop = UDim.new(0, 10),
+	PaddingBottom = UDim.new(0, 10), Parent = root,
 })
-local portBox = new("TextBox", {
-	Position = UDim2.fromOffset(48, 0), Size = UDim2.fromOffset(90, 32), BackgroundColor3 = PANEL, BorderSizePixel = 0,
-	Text = tostring(port), TextColor3 = TEXT, TextSize = 16, Font = Enum.Font.GothamMedium, ClearTextOnFocus = false,
-	Parent = row,
-}) :: TextBox
-new("UICorner", { CornerRadius = UDim.new(0, 4), Parent = portBox })
-new("UIStroke", { Color = LINE, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = portBox })
+
+local card = new("Frame", { Size = UDim2.fromScale(1, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = root })
+bind(card, "BackgroundColor3", "panel")
+corner(card, 8)
+stroke(card, "border")
+new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Parent = card })
+
+-- title row: a video camera, "Video Reference", the state on the right
+local header = new("Frame", { Size = UDim2.new(1, 0, 0, 52), BackgroundTransparency = 1, LayoutOrder = 1, Parent = card })
+local cam = new("Frame", {
+	Position = UDim2.fromOffset(16, 18), Size = UDim2.fromOffset(19, 16), BackgroundTransparency = 1, Parent = header,
+})
+corner(cam, 3)
+bind(new("UIStroke", { Thickness = 2, Parent = cam }), "Color", "text")
+local lens = new("ImageLabel", {
+	Position = UDim2.fromOffset(38, 17), Size = UDim2.fromOffset(18, 18), BackgroundTransparency = 1, Image = ICON_ATLAS,
+	ImageRectOffset = Vector2.new(6 * 64, 1 * 64), ImageRectSize = Vector2.new(64, 64), Rotation = 180, Parent = header,
+})
+bind(lens, "ImageColor3", "text")
+text({ Position = UDim2.fromOffset(66, 0), Size = UDim2.new(1, -200, 1, 0), Text = "Video Reference", TextSize = 21, FontFace = BOLD,
+	TextTruncate = Enum.TextTruncate.AtEnd, Parent = header }, "text")
+local stateRow = new("Frame", {
+	AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -16, 0.5, 0), Size = UDim2.fromOffset(0, 24),
+	AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, Parent = header,
+})
+new("UIListLayout", {
+	FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center,
+	Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = stateRow,
+})
+local dot = new("Frame", { Size = UDim2.fromOffset(10, 10), LayoutOrder = 1, Parent = stateRow })
+corner(dot, 5)
+local stateLabel = text({ Size = UDim2.fromOffset(0, 24), AutomaticSize = Enum.AutomaticSize.X, TextSize = 17, LayoutOrder = 2,
+	Parent = stateRow }, "textDim")
+
+local divider = new("Frame", { Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, LayoutOrder = 2, Parent = card })
+bind(divider, "BackgroundColor3", "border")
+
+-- Port + Connect
+local row = new("Frame", { Size = UDim2.new(1, 0, 0, 72), BackgroundTransparency = 1, LayoutOrder = 3, Parent = card })
+text({ Position = UDim2.fromOffset(16, 16), Size = UDim2.fromOffset(44, 40), Text = "Port", TextSize = 18, Parent = row }, "textDim")
+local portBox = text({
+	Class = "TextBox", Position = UDim2.fromOffset(70, 16), Size = UDim2.new(0.4, -60, 0, 40), BackgroundTransparency = 0,
+	Text = tostring(port), TextSize = 18, ClearTextOnFocus = false, Parent = row,
+}, "text") :: TextBox
+bind(portBox, "BackgroundColor3", "input")
+corner(portBox, 6)
+stroke(portBox, "border")
+new("UIPadding", { PaddingLeft = UDim.new(0, 12), Parent = portBox })
 local connect = new("TextButton", {
-	AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, 0, 0, 0), Size = UDim2.fromOffset(120, 32),
-	BackgroundColor3 = ACCENT, BorderSizePixel = 0, TextColor3 = Color3.fromRGB(4, 18, 38), TextSize = 16,
-	Font = Enum.Font.GothamBold, Text = "Connect", Parent = row,
+	AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 0, 16), Size = UDim2.new(0.6, -36, 0, 40),
+	AutoButtonColor = true, TextSize = 19, FontFace = BOLD, Text = "Connect", Parent = row,
 }) :: TextButton
-new("UICorner", { CornerRadius = UDim.new(0, 4), Parent = connect })
+corner(connect, 6)
+local connectStroke = new("UIStroke", { ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = connect })
 
-local status = new("TextLabel", {
-	Size = UDim2.new(1, 0, 0, 60), BackgroundTransparency = 1, LayoutOrder = 2, TextColor3 = MUTED, TextSize = 15,
-	Font = Enum.Font.Gotham, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left,
-	TextYAlignment = Enum.TextYAlignment.Top, Text = "", Parent = root,
-}) :: TextLabel
+-- the steps
+local steps = new("Frame", {
+	Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 4, Parent = card,
+})
+new("UIPadding", { PaddingLeft = UDim.new(0, 8), PaddingRight = UDim.new(0, 8), PaddingBottom = UDim.new(0, 8), Parent = steps })
+local stepsBox = new("Frame", { Size = UDim2.fromScale(1, 0), AutomaticSize = Enum.AutomaticSize.Y, Parent = steps })
+bind(stepsBox, "BackgroundColor3", "panelAlt")
+corner(stepsBox, 6)
+new("UIPadding", {
+	PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12), PaddingTop = UDim.new(0, 10),
+	PaddingBottom = UDim.new(0, 10), Parent = stepsBox,
+})
+new("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = stepsBox })
+for i, line in { "Open HA Video Reference and load a video.", "Match the port above, then click Connect." } do
+	local item = new("Frame", {
+		Size = UDim2.fromScale(1, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = i, Parent = stepsBox,
+	})
+	local badge = text({ Size = UDim2.fromOffset(24, 24), BackgroundTransparency = 0, Text = tostring(i), TextSize = 15, FontFace = BOLD,
+		TextXAlignment = Enum.TextXAlignment.Center, Parent = item }, "text")
+	bind(badge, "BackgroundColor3", "buttonStroke")
+	corner(badge, 12)
+	text({ Position = UDim2.fromOffset(36, 0), Size = UDim2.new(1, -36, 0, 24), AutomaticSize = Enum.AutomaticSize.Y,
+		Text = line, TextSize = 17, TextWrapped = true, Parent = item }, "textDim")
+end
 
-local shown = ""
-local function setStatus(text: string, color: Color3?)
-	if text ~= shown then
-		shown = text
-		status.Text = text
-	end
-	status.TextColor3 = color or MUTED
+-- what went wrong / what is synced (empty = hidden)
+local detail = text({
+	Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, TextSize = 16, TextWrapped = true, LayoutOrder = 5,
+	Visible = false, Parent = card,
+}, "textDim")
+new("UIPadding", { PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16), PaddingBottom = UDim.new(0, 12), Parent = detail })
+
+-- the state: a word in the title row (dot token: textMuted / warning / success / danger) and an optional detail line
+local stateToken, detailToken = "textMuted", "textDim"
+local function setState(word: string, token: string, why: string?, whyToken: string?)
+	stateLabel.Text = word
+	stateToken, detailToken = token, whyToken or "textDim"
+	dot.BackgroundColor3 = colors[stateToken]
+	detail.Text = why or ""
+	detail.Visible = why ~= nil and why ~= ""
+	detail.TextColor3 = colors[detailToken]
 end
 
 local function refreshButton()
 	connect.Text = if on then "Disconnect" else "Connect"
-	connect.BackgroundColor3 = if on then PANEL else ACCENT
-	connect.TextColor3 = if on then TEXT else Color3.fromRGB(4, 18, 38)
+	connect.BackgroundColor3 = colors[if on then "button" else "accent"]
+	connect.TextColor3 = colors[if on then "text" else "accentText"]
+	connectStroke.Color = colors[if on then "buttonStroke" else "accent"]
 	if not on then
-		setStatus("Start the app (Start Video Reference), open a video in it, then press Connect.")
+		setState("Disconnected", "textMuted")
 	end
 end
 
@@ -145,16 +291,18 @@ local function send(state)
 					Body = HttpService:JSONEncode(s),
 				})
 			end)
-			if ok and result.Success then
-				setStatus(string.format("Synced · frame %d at %g fps%s", math.floor(s.frame + 0.5), s.fps, if s.playing then " · playing" else ""), OK)
+			if not on then
+				break -- disconnected meanwhile
+			elseif ok and result.Success then
+				setState("Connected", "success", string.format("Frame %d · %g fps%s", math.floor(s.frame + 0.5), s.fps, if s.playing then " · playing" else ""))
 			elseif ok then
-				setStatus(string.format("The app answered %d on port %d: is that the HA Video Reference app?", result.StatusCode, port), WARN)
+				setState("Wrong app", "danger", string.format("Port %d answered %d: is that HA Video Reference?", port, result.StatusCode), "danger")
 			else
 				local why = tostring(result)
 				if string.find(why, "ConnectFail", 1, true) or string.find(why, "refused", 1, true) then
-					setStatus(string.format("Can't reach the app on port %d. Start it (Start Video Reference) and keep its window open.", port), WARN)
+					setState("App not found", "danger", string.format("Nothing on port %d. Open HA Video Reference and keep it open.", port), "danger")
 				else
-					setStatus("Couldn't sync: " .. why .. " (allow localhost when Studio asks)", WARN)
+					setState("Error", "danger", "Couldn't sync: " .. why .. " (allow localhost when Studio asks)", "danger")
 				end
 			end
 		end
@@ -162,18 +310,25 @@ local function send(state)
 	end)
 end
 
-local lastSent, lastTime = nil, 0
+local lastSent, lastTime, lastThemeCheck = nil, 0, 0
+local themeChanged = false
 local heartbeat = RunService.Heartbeat:Connect(function()
-	if not on then
-		return
-	end
 	local now = os.clock()
-	if now - lastTime < SEND_INTERVAL then
+	if now - lastThemeCheck >= HEARTBEAT then -- Heaven's Animator can start, stop or switch themes any time
+		lastThemeCheck = now
+		if applyTheme() then
+			themeChanged = true
+			refreshButton()
+			dot.BackgroundColor3 = colors[stateToken]
+			detail.TextColor3 = colors[detailToken]
+		end
+	end
+	if not on or now - lastTime < SEND_INTERVAL then
 		return
 	end
 	local s = snapshot()
 	if s == nil then
-		setStatus("Connected. Open an animation in Heaven's Animator to sync.", MUTED)
+		setState("Connected", "warning", "Open an animation in Heaven's Animator to sync.")
 		return
 	end
 	local changed = lastSent == nil
@@ -181,7 +336,12 @@ local heartbeat = RunService.Heartbeat:Connect(function()
 		or s.playing ~= lastSent.playing
 		or s.fps ~= lastSent.fps
 		or s.speed ~= lastSent.speed
-	if changed or now - lastTime >= HEARTBEAT then
+	local beat = now - lastTime >= HEARTBEAT
+	if changed or beat or themeChanged then
+		if beat or themeChanged then
+			s.theme = themeHex
+			themeChanged = false
+		end
 		lastSent, lastTime = s, now
 		send(s)
 	end
@@ -193,7 +353,8 @@ local function setOn(value: boolean)
 	lastSent = nil
 	refreshButton()
 	if on then
-		setStatus("Connecting…")
+		themeChanged = true -- the app gets the theme with the first sync
+		setState("Connecting…", "warning")
 	end
 end
 
@@ -218,6 +379,10 @@ end)
 button:SetActive(widget.Enabled)
 
 refreshButton()
+if on then
+	setState("Connecting…", "warning")
+	themeChanged = true
+end
 
 plugin.Unloading:Connect(function()
 	heartbeat:Disconnect()

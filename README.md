@@ -3,60 +3,84 @@
 # HA Video Reference
 
 A reference video next to Roblox Studio that follows **Heaven's Animator**'s timeline: scrub, step or play in the
-animator and your video moves to the same moment. Works with Heaven's Animator (full edition) and Heaven's Animator
-Lite.
+animator and your video moves to the exact same frame. Works with Heaven's Animator (full edition) and Heaven's
+Animator Lite.
 
-- Any video your browser can play (mp4, webm, mov ...). It plays from your computer: nothing is uploaded.
-- Frame-exact while paused; while playing it stays within about a frame of Studio.
-- Frame offset, mirror, sound and Picture in Picture (a small always-on-top video window).
-- Windows: nothing to install (it uses the PowerShell built into Windows). It only listens on `localhost`, so nothing
-  outside your computer can reach it.
+- A small Windows app, not a browser page: it uses Windows' own video decoder, so every frame is exact.
+- Your video plays from your computer. Nothing is uploaded.
+- The app and the Studio panel wear Heaven's Animator's theme.
+- Blender-style controls:
+  - Start (Earlier / Later, Start Here)
+  - Trim and Speed
+  - Loop
+  - Mute and Volume
+  - Mirror
+  - Always on top
+  - Pan and zoom
+- Windows 10 / 11, nothing to install. It only listens on `localhost`, so nothing outside your computer can reach it.
 
 ## Download
 
-[![Download HA Video Reference](https://img.shields.io/badge/Download-HA%20Video%20Reference-3ec5ff?style=for-the-badge)](https://github.com/MrHxaven/ha-video-reference/raw/main/HA-Video-Reference.zip)
+[![Download HA Video Reference](https://img.shields.io/badge/Download-HA%20Video%20Reference-ffb02e?style=for-the-badge)](https://github.com/MrHxaven/ha-video-reference/raw/main/HA-Video-Reference.zip)
 
 The button always downloads the newest version ([`HA-Video-Reference.zip`](HA-Video-Reference.zip)). Unzip it
-anywhere. **Code › Download ZIP** on this page works too.
+anywhere.
 
 ## Setup (once)
 
-1. Put **`HA Video Sync.rbxmx`** in your Studio Plugins folder (Studio › Plugins tab › **Plugins Folder**) and restart
-   Studio. A toolbar tab **HA Video Reference** appears with a **Video Sync** button.
+1. Put **`HA Video Sync.rbxmx`** in your Studio Plugins folder (Studio › Plugins tab › **Plugins Folder**).
+2. Restart Studio. A toolbar tab **HA Video Reference** appears with a **Video Sync** button.
 
 ## Every time
 
-1. Double-click **`Start Video Reference.bat`**. A small window opens (keep it open) and the player opens in your
-   browser.
-2. In the player: **Open Video…** (or drop a video on it).
-3. In Studio: **HA Video Reference** tab › **Video Sync** › **Connect**. The first time, Studio asks to let the
-   plugin reach `localhost`: allow it.
-4. Animate. The video follows Heaven's Animator's frame.
+1. Open **`HA Video Reference.exe`** and open a video in it. You can use **Open Video…**, drop a video on the window,
+   or drop it on the .exe.
+2. In Studio, go to the **HA Video Reference** tab › **Video Sync** and click **Connect**. The port must match (34900
+   by default).
+   - The first time, Studio asks to let the plugin reach `localhost`. Allow it.
+3. Animate. The video follows Heaven's Animator's frame.
 
-## In the player
+## In the app
 
 | Control | What it does |
 |---|---|
-| Frame offset | The video time that matches Studio's frame 0, in frames (e.g. 12 skips the first 12 frames) |
+| Start | The Studio frame where the video starts. **Earlier / Later** (−10 −1 +1 +10) nudge it; **Start Here** uses Studio's current frame |
+| Trim | Video frames skipped at the video's start |
+| Speed | How fast the video plays against Studio (1 = real time) |
+| Loop | Plays the video again from Start when it ends (otherwise it holds its last frame) |
+| Mute / Volume | The video's sound |
 | Mirror | Flips the video left / right |
-| Sound | The video plays muted unless you turn this on |
-| Picture in Picture | A small always-on-top video window you can put next to Studio |
+| Always on top | Keeps the window above Studio |
+| Middle mouse / wheel / Home | Pan / zoom / fit |
+
+Settings are remembered. Phone videos show the right way up.
 
 ## Trouble
 
-- **"Can't reach the app"**: the `.bat` window is closed or uses another port. Start it again; the port in the plugin
-  and the window must match (default `34900`).
-- **Another port**: run `"Start Video Reference.bat" 34901` from a command prompt, then type `34901` in the plugin's
-  Port box.
-- **Windows SmartScreen**: it is a plain script. **More info › Run anyway**, or right-click the file › Properties ›
-  **Unblock**.
+- **"App not found"**: the app is closed or uses another port. Open it again; the port in the plugin and the app must
+  match (default `34900`).
+- **Another port**: run `"HA Video Reference.exe" 34901` from a command prompt, then type `34901` in the plugin's Port
+  box.
+- **"Can't play that video"**: Windows has no decoder for it. An mp4 (H.264) always works.
+- **Windows SmartScreen**: the app isn't signed. Click **More info › Run anyway**, or right-click the .exe ›
+  Properties › **Unblock**. The full source is in [`app/VideoReference.cs`](app/VideoReference.cs) if you'd rather
+  check it.
 
 ## How it works
 
-`Start Video Reference.bat` runs `server.ps1`, a tiny web server on `http://localhost:34900/`. The **HA Video Sync**
-plugin (source in [`plugin/VideoSync.server.lua`](plugin/VideoSync.server.lua)) posts Heaven's Animator's frame to
-`/sync` (`{frame, fps, playing, speed}`, up to 30 times a second while something changes, once a second otherwise).
-The player page (`player.html`) reads `/state` and moves the video: paused it seeks to the exact frame, playing it
-plays at Studio's speed and corrects any drift.
+**`HA Video Reference.exe`** ([`app/VideoReference.cs`](app/VideoReference.cs)) is one C# file. Windows builds it with
+its own `csc.exe`, so it needs no install. It does three jobs:
+
+- runs a tiny web server on `http://localhost:34900/`;
+- decodes the video with Media Foundation;
+- shows it in a WPF window.
+
+The **HA Video Sync** plugin ([`plugin/VideoSync.server.lua`](plugin/VideoSync.server.lua)) posts Heaven's Animator's
+frame to `/sync` as `{frame, fps, playing, speed, theme}`:
+
+- up to 30 times a second while something changes;
+- once a second otherwise.
+
+The app maps Studio's frame through Start, Trim, Speed and Loop to a video frame, then decodes exactly that frame.
 
 Made for [Heaven's Animator](https://create.roblox.com/store/asset/84471422588789) by MrHxaven. MIT licensed.
