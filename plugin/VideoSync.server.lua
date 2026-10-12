@@ -19,7 +19,7 @@ local PORT_SETTING, ON_SETTING = "HAVideoSync_Port", "HAVideoSync_On"
 local DEFAULT_PORT = 34900
 local SEND_INTERVAL = 1 / 30
 local HEARTBEAT = 1
-local ICON = "rbxassetid://101700988929746" -- the animator's logo
+local ICON = "rbxassetid://97131655361849" -- the drawn logo with a video badge (assets/icons/video_sync_*.png)
 
 local port = tonumber(plugin:GetSetting(PORT_SETTING)) or DEFAULT_PORT
 local on = plugin:GetSetting(ON_SETTING) == true

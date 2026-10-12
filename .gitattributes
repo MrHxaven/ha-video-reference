@@ -5,3 +5,4 @@
 *.rbxmx text eol=lf
 *.md text eol=lf
 *.zip binary
+*.png binary

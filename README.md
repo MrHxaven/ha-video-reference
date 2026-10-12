@@ -1,3 +1,5 @@
+<p align="center"><img src="logo.png" width="180" alt="HA Video Reference logo"></p>
+
 # HA Video Reference
 
 A reference video next to Roblox Studio that follows **Heaven's Animator**'s timeline: scrub, step or play in the
