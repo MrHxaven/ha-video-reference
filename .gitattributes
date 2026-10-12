@@ -1,0 +1,6 @@
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.html text eol=lf
+*.lua text eol=lf
+*.rbxmx text eol=lf
+*.md text eol=lf
