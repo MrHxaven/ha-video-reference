@@ -1176,7 +1176,9 @@ interface IMFAttributes
 	[PreserveSig] int GetUINT32([In] ref Guid key, out int value);
 	[PreserveSig] int GetUINT64([In] ref Guid key, out long value);
 	void _7(); void _8(); void _9(); void _10(); void _11(); void _12();
-	[PreserveSig] int GetBlob([In] ref Guid key, [Out] byte[] buffer, int size, out int written);
+	// (a COM method passes a byte[] as a SAFEARRAY unless told otherwise: GetBlob wants a plain buffer of `size` bytes;
+	// without this it wrote into the SAFEARRAY descriptor = AccessViolationException on opening a video, a user report)
+	[PreserveSig] int GetBlob([In] ref Guid key, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] buffer, int size, out int written);
 	void _14(); void _15(); void _16(); void _17(); void _18();
 	void SetUINT32([In] ref Guid key, int value);
 	void _20(); void _21();
@@ -1190,7 +1192,9 @@ interface IMFMediaType // : IMFAttributes (only the attribute calls are used)
 	[PreserveSig] int GetUINT32([In] ref Guid key, out int value);
 	[PreserveSig] int GetUINT64([In] ref Guid key, out long value);
 	void _7(); void _8(); void _9(); void _10(); void _11(); void _12();
-	[PreserveSig] int GetBlob([In] ref Guid key, [Out] byte[] buffer, int size, out int written);
+	// (a COM method passes a byte[] as a SAFEARRAY unless told otherwise: GetBlob wants a plain buffer of `size` bytes;
+	// without this it wrote into the SAFEARRAY descriptor = AccessViolationException on opening a video, a user report)
+	[PreserveSig] int GetBlob([In] ref Guid key, [Out, MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 2)] byte[] buffer, int size, out int written);
 	void _14(); void _15(); void _16(); void _17(); void _18();
 	void SetUINT32([In] ref Guid key, int value);
 	void _20(); void _21();
